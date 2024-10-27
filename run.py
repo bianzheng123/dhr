@@ -3,16 +3,19 @@
 
 
 import argparse
+import os
+import time
+import json
+
 from tevatron.datasets.beir.sentence_bert import Retriever, SentenceTransformerModel
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-
 from tevatron.arguments import ModelArguments
-
 
 from beir.datasets.data_loader import GenericDataLoader
 from beir.retrieval.evaluation import EvaluateRetrieval
 from beir import util, LoggingHandler
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -24,8 +27,8 @@ def main():
     parser.add_argument("--semi_aggregate", action='store_true', help='for agg model')
     parser.add_argument("--skip_mlm", action='store_true', help='for agg model')
     parser.add_argument("--pooling_method", type=str, default='cls', help='for dense model')
+    parser.add_argument("--username", type=str, default='bianzheng', help='username')
     args = parser.parse_args()
-
 
     model_type_or_dir = args.model_name_or_path
     model_args = ModelArguments
@@ -42,12 +45,13 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(model_type_or_dir, use_fast=False)
     sentence_transformer = SentenceTransformerModel(model, tokenizer, args.max_length)
 
-
     dataset = args.dataset
 
-    url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(dataset)
-    out_dir = "dataset/{}".format(dataset)
-    data_path = util.download_and_unzip(url, out_dir)
+    # url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(dataset)
+    # out_dir = "dataset/{}".format(dataset)
+    # data_path = util.download_and_unzip(url, out_dir)
+    # print("---------------------------data_path",data_path)
+    data_path = f'dataset/{dataset}/{dataset}'
 
     #### Provide the data path where nfcorpus has been downloaded and unzipped to the data loader
     # data folder would contain these files:
@@ -57,18 +61,61 @@ def main():
 
     corpus, queries, qrels = GenericDataLoader(data_folder=data_path).load(split="test")
 
-    from beir.retrieval.search.dense import DenseRetrievalExactSearch as DRES
+    # from beir.retrieval.search.dense import DenseRetrievalExactSearch as DRES
+    from beir.retrieval.search.dense import HNSWFaissSearch as DRFS
     from beir.retrieval.evaluation import EvaluateRetrieval
 
-    dres = DRES(sentence_transformer)
-    retriever = EvaluateRetrieval(dres, score_function="dot")
+    topk = 10
+
+    hnsw_ef_construction = 100
+    hnsw_ef_search = 30
+
+    dres = DRFS(sentence_transformer, hnsw_store_n=len(corpus), hnsw_ef_construction=hnsw_ef_construction,
+                hnsw_ef_search=hnsw_ef_search)
+    assert not dres.faiss_index
+    start_time = time.time()
+    dres.index(corpus)
+    build_index_time = time.time() - start_time
+    assert dres.faiss_index
+    retriever = EvaluateRetrieval(dres, score_function="dot", k_values=[topk])
+    start_time = time.time()
     results = retriever.retrieve(corpus, queries)
-    ndcg, map_, recall, p = EvaluateRetrieval.evaluate(qrels, results, [1, 10, 100, 1000])
-    results2 = EvaluateRetrieval.evaluate_custom(qrels, results, [1, 10, 100, 1000], metric="r_cap")
+    retrieval_time = time.time() - start_time
+    ndcg, map_, recall, p = EvaluateRetrieval.evaluate(qrels, results, [topk])
+    results2 = EvaluateRetrieval.evaluate_custom(qrels, results, [topk], metric="mrr")
+    print(ndcg)
+    print(recall)
+    print(results2)
     res = {"NDCG@10": ndcg["NDCG@10"],
-           "Recall@100": recall["Recall@100"],
-           "R_cap@100": results2["R_cap@100"]}
+           "Recall@10": recall["Recall@10"],
+           "MRR@10": results2["MRR@10"]}
     print("res for {}:".format(dataset), res, flush=True)
+
+    performance_json = {
+        "n_query": len(queries),
+        "topk": topk,
+        "build_index": {
+            "efConstruction": hnsw_ef_construction,
+            "time(s)": build_index_time
+        },
+        "retrieval": {
+            "efSearch": hnsw_ef_search
+        },
+        "search_time": {
+            "total_query_time_ms": retrieval_time * 1e3,
+            "retrieval_time_average(ms)": retrieval_time / len(queries) * 1e3,
+        },
+        "search_accuracy": {
+            "mrr_mean": results2["MRR@10"],
+            "e2e_recall_mean": recall["Recall@10"],
+            "ndcg_mean": ndcg["NDCG@10"]
+        }
+    }
+
+    performance_path = f"/home/{args.username}/Dataset/vector-set-similarity-search/end2end/Result/performance"
+    fname = f"{dataset}-retrieval-HNSW-Aggretriever-top{topk}--.json"
+    with open(os.path.join(performance_path, fname), "w") as f:
+        json.dump(performance_json, f)
 
 
 if __name__ == "__main__":
