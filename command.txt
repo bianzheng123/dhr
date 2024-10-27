@@ -1,0 +1,25 @@
+python -m tevatron.driver.encode \
+    --output_dir ${MODEL_DIR} \
+    --model_name_or_path ${MODEL_DIR} \
+    --add_pooler \
+    --projection_out_dim ${CLSDIM} \
+    --agg_dim ${AGGDIM} \
+    --model ${MODEL} \
+    --fp16 \
+    --p_max_len 128 \
+    --per_device_eval_batch_size 128 \
+    --encode_in_path ${DATA_DIR}/corpus/split${i}.json \
+    --encoded_save_path ${INDEX_DIR}/${CORPUS}.split${i}.pt &
+
+proxychains python3 -m tevatron.driver.encode \
+    --output_dir ./output \
+    --model_name_or_path jacklin/DistilBERT-AGG \
+    --add_pooler \
+    --projection_out_dim 128 \
+    --agg_dim 640 \
+    --model agg \
+    --fp16 \
+    --p_max_len 128 \
+    --per_device_eval_batch_size 128 \
+    --encode_in_path ./corpus/split0.json \
+    --encoded_save_path ./corpus_encode/split0.pt
