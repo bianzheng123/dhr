@@ -17,6 +17,18 @@ from beir.retrieval.evaluation import EvaluateRetrieval
 from beir import util, LoggingHandler
 
 
+def write_answer(username: str, dataset: str, results: dict, topk: int):
+    answer_path = f"/home/{username}/Dataset/vector-set-similarity-search/end2end/Result/answer"
+    answer_fname = os.path.join(answer_path, f"{dataset}-HNSW-Aggretriever-top{topk}--.tsv")
+    print(results)
+    with open(answer_fname, 'w') as f:
+        for query_id in results.keys():
+            result = results[query_id]
+            for idx, doc_id in enumerate(result.keys()):
+                score = result[doc_id]
+                f.write(f"{query_id}\t{doc_id}\t{idx + 1}\t{score}\n")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, required=True)
@@ -45,6 +57,7 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(model_type_or_dir, use_fast=False)
     sentence_transformer = SentenceTransformerModel(model, tokenizer, args.max_length)
 
+    username = args.username
     dataset = args.dataset
 
     # url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(dataset)
@@ -81,6 +94,7 @@ def main():
     start_time = time.time()
     results = retriever.retrieve(corpus, queries)
     retrieval_time = time.time() - start_time
+    write_answer(username, dataset, results, topk)
     ndcg, map_, recall, p = EvaluateRetrieval.evaluate(qrels, results, [topk])
     results2 = EvaluateRetrieval.evaluate_custom(qrels, results, [topk], metric="mrr")
     print(ndcg)
@@ -112,7 +126,7 @@ def main():
         }
     }
 
-    performance_path = f"/home/{args.username}/Dataset/vector-set-similarity-search/end2end/Result/performance"
+    performance_path = f"/home/{username}/Dataset/vector-set-similarity-search/end2end/Result/performance"
     fname = f"{dataset}-retrieval-HNSW-Aggretriever-top{topk}--.json"
     with open(os.path.join(performance_path, fname), "w") as f:
         json.dump(performance_json, f)
