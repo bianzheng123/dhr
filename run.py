@@ -80,56 +80,68 @@ def main():
 
     topk = 10
 
-    hnsw_ef_construction = 100
-    hnsw_ef_search = 30
+    if username == 'bianzheng':
+        M = 16
+        hnsw_ef_construction = 30
+        hnsw_ef_search_l = [10, 20, 30, 40]
+    else:
+        assert username == 'zhengbian'
+        M = 32
+        hnsw_ef_construction = 200
+        hnsw_ef_search_l = [10, 20, 30, 40, 60, 80, 120, 160, 300, 500, 1000, 2000, 4000, 8000]
 
-    dres = DRFS(sentence_transformer, hnsw_store_n=len(corpus), hnsw_ef_construction=hnsw_ef_construction,
-                hnsw_ef_search=hnsw_ef_search)
+    test_ef_search = 30
+    dres = DRFS(sentence_transformer, hnsw_store_n=M, hnsw_ef_construction=hnsw_ef_construction,
+                hnsw_ef_search=test_ef_search)
+
     assert not dres.faiss_index
     start_time = time.time()
     dres.index(corpus)
+    print(dres.faiss_index.index.hnsw.efSearch)
     build_index_time = time.time() - start_time
     assert dres.faiss_index
-    retriever = EvaluateRetrieval(dres, score_function="dot", k_values=[topk])
-    start_time = time.time()
-    results = retriever.retrieve(corpus, queries)
-    retrieval_time = time.time() - start_time
-    write_answer(username, dataset, results, topk)
-    ndcg, map_, recall, p = EvaluateRetrieval.evaluate(qrels, results, [topk])
-    results2 = EvaluateRetrieval.evaluate_custom(qrels, results, [topk], metric="mrr")
-    print(ndcg)
-    print(recall)
-    print(results2)
-    res = {"NDCG@10": ndcg["NDCG@10"],
-           "Recall@10": recall["Recall@10"],
-           "MRR@10": results2["MRR@10"]}
-    print("res for {}:".format(dataset), res, flush=True)
+    for hnsw_ef_search in hnsw_ef_search_l:
+        dres.faiss_index.index.hnsw.efSearch = hnsw_ef_search
+        retriever = EvaluateRetrieval(dres, score_function="dot", k_values=[topk])
+        start_time = time.time()
+        results = retriever.retrieve(corpus, queries)
+        retrieval_time = time.time() - start_time
+        write_answer(username, dataset, results, topk)
+        ndcg, map_, recall, p = EvaluateRetrieval.evaluate(qrels, results, [topk])
+        results2 = EvaluateRetrieval.evaluate_custom(qrels, results, [topk], metric="mrr")
+        print(ndcg)
+        print(recall)
+        print(results2)
+        res = {"NDCG@10": ndcg["NDCG@10"],
+               "Recall@10": recall["Recall@10"],
+               "MRR@10": results2["MRR@10"]}
+        print("res for {}:".format(dataset), res, flush=True)
 
-    performance_json = {
-        "n_query": len(queries),
-        "topk": topk,
-        "build_index": {
-            "efConstruction": hnsw_ef_construction,
-            "time(s)": build_index_time
-        },
-        "retrieval": {
-            "efSearch": hnsw_ef_search
-        },
-        "search_time": {
-            "total_query_time_ms": retrieval_time * 1e3,
-            "retrieval_time_average(ms)": retrieval_time / len(queries) * 1e3,
-        },
-        "search_accuracy": {
-            "mrr_mean": results2["MRR@10"],
-            "e2e_recall_mean": recall["Recall@10"],
-            "ndcg_mean": ndcg["NDCG@10"]
+        performance_json = {
+            "n_query": len(queries),
+            "topk": topk,
+            "build_index": {
+                "efConstruction": hnsw_ef_construction,
+                "time(s)": build_index_time
+            },
+            "retrieval": {
+                "efSearch": hnsw_ef_search
+            },
+            "search_time": {
+                "total_query_time_ms": retrieval_time * 1e3,
+                "retrieval_time_average(ms)": retrieval_time / len(queries) * 1e3,
+            },
+            "search_accuracy": {
+                "mrr_mean": results2["MRR@10"],
+                "e2e_recall_mean": recall["Recall@10"],
+                "ndcg_mean": ndcg["NDCG@10"]
+            }
         }
-    }
 
-    performance_path = f"/home/{username}/Dataset/vector-set-similarity-search/end2end/Result/performance"
-    fname = f"{dataset}-retrieval-HNSW-Aggretriever-top{topk}--.json"
-    with open(os.path.join(performance_path, fname), "w") as f:
-        json.dump(performance_json, f)
+        performance_path = f"/home/{username}/Dataset/vector-set-similarity-search/end2end/Result/performance"
+        fname = f"{dataset}-retrieval-HNSW-Aggretriever-top{topk}-M_{M}-efConstruction_{hnsw_ef_construction}-efSearch_{hnsw_ef_search}.json"
+        with open(os.path.join(performance_path, fname), "w") as f:
+            json.dump(performance_json, f)
 
 
 if __name__ == "__main__":
