@@ -86,8 +86,8 @@ def main():
         hnsw_ef_search_l = [10, 20, 30, 40]
     else:
         assert username == 'zhengbian'
-        M = 32
-        hnsw_ef_construction = 200
+        M = 256
+        hnsw_ef_construction = 500
         hnsw_ef_search_l = [10, 20, 30, 40, 60, 80, 120, 160, 300, 500, 1000, 2000, 4000, 8000]
 
     test_ef_search = 30

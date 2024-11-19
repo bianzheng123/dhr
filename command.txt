@@ -2,5 +2,7 @@ python3 run.py --dataset quora_self --username bianzheng --model_name_or_path Di
 
 python3 run.py --dataset lotte-500-gnd --username bianzheng --model_name_or_path DistilBERT-AGG --model AGG --agg_dim 640
 
+python3 run.py --dataset lotte-500-gnd --username bianzheng --model_name_or_path DistilBERT-AGG --model AGG --agg_dim 50
+
 
 python3 -m tevatron.datasets.beir.encode_and_retrieval --dataset scifact --model_name_or_path DistilBERT-AGG --model AGG --agg_dim 640
